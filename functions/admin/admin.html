@@ -1,0 +1,425 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>第三方平台授权</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <script src="//imgcache.qq.com/qcloud/tcbjs/1.7.0/tcb.js"></script>
+</head>
+
+<body>
+    <button onClick="getPreAuth()">新增授权链接</button>
+    <table border="1px" cellpadding="0">
+        <thead>
+            <td>授权名称</td>
+            <td>目前状态</td>
+            <td>关键时间</td>
+            <td>APPID</td>
+            <td>操作</td>
+        </thead>
+        <tbody id="elm">
+        </tbody>
+    </table>
+    <table border="1px" cellpadding="0">
+        <tbody>
+            <tr>
+                <td>标记目标：</td>
+                <td id="showapp" style="color:cornflowerblue"></td>
+            </tr>
+            <tr>
+                <td>企业名称：</td>
+                <td><input id="data-name" type="text" /></td>
+            </tr>
+            <tr>
+                <td>企业介绍：</td>
+                <td><textarea id="data-des"></textarea></td>
+            </tr>
+            <tr>
+                <td>企业负责：</td>
+                <td><input id="data-person" type="text" /></td>
+            </tr>
+            <tr>
+                <td>联系电话：</td>
+                <td><input id="data-tel" type="text" pattern="[0-9]" /></td>
+            </tr>
+            <tr>
+                <td>企业logo：</td>
+                <td><input id="data-logo" type="file" /></td>
+            </tr>
+            <tr>
+                <td>执行操作：</td>
+                <td style="display: flex;">
+                    <button onclick="doMain()">开始执行部署</button>
+                    <button onclick="cancelApp()">取消执行</button>
+                </td>
+            </tr>
+            <tr id="showdes">
+                <td colspan='2' style="overflow-y: auto;">
+                    <p id="showdesw" style="width: 100%;height: 300px;text-align: left;color: rgb(8, 167, 74);"></p>
+                    </div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    <style>
+        button {
+            border: none;
+            margin-right: 10px;
+            outline: none;
+        }
+
+        button:active {
+            background-color: #bbbbbb;
+        }
+
+        input {
+            width: 100%;
+            border: none;
+            outline: none;
+        }
+
+        textarea {
+            width: 100%;
+            border: none;
+            outline: none;
+            resize: none;
+        }
+
+        table {
+            margin-top: 20px;
+            border-collapse: collapse;
+            width: 100%;
+            max-width: 900px;
+        }
+
+        thead td {
+            text-align: center;
+            font-weight: 900;
+        }
+
+        tbody td {
+            text-align: center;
+        }
+    </style>
+    <script>
+        let data = [];
+        let bodyelm = document.getElementById('elm');
+        let showapp = document.getElementById('showapp');
+        let showdes = document.getElementById('showdesw');
+        let data_name = document.getElementById('data-name');
+        let data_des = document.getElementById('data-des');
+        let data_person = document.getElementById('data-person');
+        let data_tel = document.getElementById('data-tel');
+        let data_logo = document.getElementById('data-logo');
+        let input = {};
+
+        let app = tcb.init({
+            env: ''//填写自己的云开发环境ID
+        });
+        let auth = app.auth();
+
+        auth.anonymousAuthProvider().signIn().then(() => {
+            console.log('匿名登录成功！');
+            init();
+        });
+
+        function showdesw(content) {
+            showdes.innerHTML += content;
+        }
+
+        function doMain() {
+            input.name = data_name.value != '' ? data_name.value : "测试企业";
+            input.des = data_des.value != '' ? data_des.value : "这是一段测试介绍";
+            input.person = data_person.value != '' ? data_person.value : '测试负责人';
+            input.tel = data_tel.value != '' ? data_tel.value : '测试电话';
+            input.logo = data_logo.files.length > 0 ? data_logo.files[0] : null;
+            if (input.appid != null) {
+                getenvinfo();
+            }
+            else {
+                alert('没有标记对象！');
+            }
+        }
+
+        function getenvinfo() {
+            showdesw('查询小程序的云开发环境……<br/>');
+            toTCB({
+                name: 'getenvinfo',
+                appid: input.appid,
+                data: {},
+                success(res) {
+                    console.log(res);
+                    if (res.errcode == 0 && res.info_list != 0) {
+                        showdesw('检测到' + res.info_list.length + '个云开发环境，使用默认环境id：' + res.info_list[0].env + '<br/>');
+                        input.env = res.info_list[0].env;
+                        uploadfile();
+                    }
+                    else {
+                        showdesw('环境检测失败！请手工执行接下来的事项<br/>');
+                    }
+                }
+            })
+        }
+
+        function uploadfile() {
+            if (input.logo != null) {
+                showdesw('开始上传企业LOGO……<br/>');
+                toTCB({
+                    name: 'uploadfile',
+                    appid: input.appid,
+                    data: {
+                        env: input.env,
+                        path: 'logo.png'
+                    },
+                    success(res) {
+                        console.log(res);
+                        if (res.errcode == 0) {
+                            callsupload(res.url, 'logo.png', res.cos_file_id, res.token, res.authorization, input.logo, function (e) {
+                                let fileurl = e;
+                                fileurl = fileurl.slice(fileurl.indexOf('myqcloud.com/') + 13, fileurl.indexOf('/logo.png'));
+                                fileurl = 'https://' + fileurl + '.tcb.qcloud.la/logo.png';
+                                console.log(fileurl);
+                                input.logourl = fileurl;
+                                showdesw('企业LOGO文件上传成功！<br/>');
+                                databasecollectionadd();
+                            })
+                        }
+                        else {
+                            showdesw('文件上传失败！请手工执行接下来的事项<br/>');
+                        }
+                    }
+                })
+            }
+            else {
+                showdesw('无企业展示LOGO，跳过此步骤！<br/>');
+                databasecollectionadd();
+            }
+        }
+
+        function callsupload(url, path, cos_file_id, token, authorization, file, success) {
+            let xml = new XMLHttpRequest();
+            xml.open("POST", url, true);
+            var form = new FormData();
+            form.append('key', path);
+            form.append('Signature', authorization);
+            form.append('x-cos-meta-fileid', cos_file_id);
+            form.append('x-cos-security-token', token);
+            form.append('file', file);
+            xml.send(form);
+            xml.responseType = 'text';
+            xml.onreadystatechange = function () {
+                if (xml.readyState == 4) {
+                    success != null ? success(xml.responseURL) : null;
+                }
+            }
+        }
+
+        function databasecollectionadd() {
+            showdesw('开始建立数据库INFO……<br/>');
+            toTCB({
+                name: 'databasecollectionadd',
+                appid: input.appid,
+                data: {
+                    env: input.env,
+                    collection_name: 'INFO'
+                },
+                success(res) {
+                    console.log(res);
+                    if (res.errcode == 0 || res.errcode == -501000) {
+                        showdesw('创建数据库INFO成功！<br/>');
+                        databaseadd();
+                    }
+                    else {
+                        showdesw('创建数据库INFO失败！请手工执行接下来的事项<br/>');
+                    }
+                }
+            })
+        }
+
+        function databaseadd() {
+            showdesw(`开始上传数据库数据，base_info = {name=${input.name},content=${input.des},person=${input.person},tel=${input.tel}}<br/>`);
+            toTCB({
+                name: 'databaseadd',
+                appid: input.appid,
+                data: {
+                    env: input.env,
+                    query: `
+                        db.collection('INFO').add({
+                            data:{
+                                _id:"base_info",
+                                content:'${input.des}',
+                                logo:"${input.logourl}",
+                                name:"${input.name}",
+                                person:"${input.person}",
+                                see:0,
+                                tel:"${input.tel}"
+                            }
+                        })
+                    `
+                },
+                success(res) {
+                    console.log(res);
+                    if (res.errcode == 0) {
+                        showdesw('数据库数据部署成功！<br/>');
+                        createfunction();
+                    }
+                    else if (res.errcode == -501000) {
+                        showdesw('数据库有原始数据，覆盖新数据！<br/>');
+                        toTCB({
+                            name: 'databaseupdate',
+                            appid: input.appid,
+                            data: {
+                                env: input.env,
+                                query: `
+                                db.collection('INFO').doc('base_info').update({
+                                    data:{
+                                        content:'${input.des}',
+                                        logo:"${input.logourl}",
+                                        name:"${input.name}",
+                                        person:"${input.person}",
+                                        see:0,
+                                        tel:"${input.tel}"
+                                    }
+                                })
+                            `
+                            },
+                            success(res) {
+                                console.log(res);
+                                if (res.errcode == 0) {
+                                    showdesw('数据库数据部署成功！<br/>');
+                                    createfunction();
+                                }
+                            }
+                        })
+                    }
+                }
+            })
+        }
+
+        function createfunction(){
+            showdesw('开始创建云开发云函数……<br/>');
+            app.callFunction({
+                name: 'deployfunction',
+                data: {
+                    appid: input.appid,
+                    env:input.env
+                }
+            }).then(res => {
+                console.log(res);
+                showdesw('云开发云函数创建成功！<br/>');
+                uploadCode();
+            }).catch(e => {
+                console.log(e);
+            });
+        }
+
+        function uploadCode(){
+            showdesw('开始上传小程序代码……<br/>');
+            app.callFunction({
+                name: 'uploadCode',
+                data: {
+                    appid: input.appid,
+                    name:input.name
+                }
+            }).then(res => {
+                console.log(res);
+                showdesw('小程序代码上传成功！<br/>');
+            }).catch(e => {
+                console.log(e);
+            });
+        }
+
+        function toTCB(obj) {
+            app.callFunction({
+                name: 'toTcb',
+                data: {
+                    appid: obj.appid,
+                    name: obj.name,
+                    data: obj.data
+                }
+            }).then(res => {
+                obj.success ? obj.success(res.result) : null;
+            }).catch(e => {
+                obj.fail ? obj.fail(e) : null;
+            });
+        }
+
+        function getPreAuth() {
+            let name = prompt("请输入授权备注名", "");
+            if (name) {
+                app.callFunction({
+                    name: 'getPreAuth',
+                    data: {
+                        name: name
+                    }
+                }).then(res => {
+                    if (res.result != null) {
+                        console.log('获取成功', res.result.id);
+                        init();
+                    }
+                    else {
+                        alert('获取授权链接失败！')
+                    }
+                });
+            }
+        }
+
+        function deletepre(id) {
+            app.callFunction({
+                name: 'admindelete',
+                data: {
+                    id: id
+                }
+            }).then(res => {
+                init();
+            });
+        }
+
+        function doApp(i) {
+            showapp.innerText = `${data[i].name}【${data[i].appid}】`;
+            input.appid = data[i].appid;
+        }
+
+        function cancelApp() {
+            showapp.innerText = '';
+            delete input.appid;
+        }
+
+        function init() {
+            app.callFunction({
+                name: 'adminGetAll'
+            }).then(res => {
+                data = res.result.data;
+                console.log(data);
+                bodyelm.innerHTML = "";
+                for (let i = 0; i < data.length; i++) {
+                    let tr = document.createElement('tr');
+
+                    let td_name = document.createElement('td');
+                    td_name.innerHTML = `<a href="https://自己的域名?do=${data[i]._id}" target="_blank">${data[i].name}</a>`;
+                    tr.appendChild(td_name);
+
+                    let td_status = document.createElement('td');
+                    td_status.innerText = data[i].status == 0 ? '未授权' : '已授权';
+                    tr.appendChild(td_status);
+
+                    let td_time = document.createElement('td');
+                    td_time.innerText = data[i].time;
+                    tr.appendChild(td_time);
+
+                    let td_appid = document.createElement('td');
+                    td_appid.innerText = data[i].appid ? data[i].appid : '-';
+                    tr.appendChild(td_appid);
+
+                    let td_opr = document.createElement('td');
+                    td_opr.innerHTML = data[i].status == 0 ? `<button onClick="deletepre('${data[i]._id}')">删除</button>` : `<button onClick="doApp('${i}')">执行部署</button><button onClick="deletepre('${data[i]._id}')">删除</button>`;
+                    tr.appendChild(td_opr);
+
+                    bodyelm.appendChild(tr);
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,92 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>客户授权</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <script src="//imgcache.qq.com/qcloud/tcbjs/1.7.0/tcb.js"></script>
+</head>
+
+<body>
+    <div id="text">这是微信第三方平台测试——客户端接口</div>
+    <script>
+        let msg_text = document.getElementById('text');
+        let app = tcb.init({
+            env: ''//填写自己的云开发环境ID
+        });
+        let auth = app.auth();
+
+        auth.anonymousAuthProvider().signIn().then(() => {
+            console.log('匿名登录成功！');
+            let query = getQueryString();
+            if (query.do != null) {
+                msg_text.innerText = "拉取授权页面中……"
+                app.callFunction({
+                    name: 'authGetOne',
+                    data: {
+                        id: query.do
+                    }
+                }).then(res => {
+                    console.log(res);
+                    if (res.result.data.length != 0) {
+                        if(res.result.data[0].status==0){
+                            window.localStorage.setItem('open_auth_id', query.do);
+                            window.location = res.result.data[0].url;
+                        }
+                        else{
+                            msg_text.innerText = "已授权！"
+                        }
+                    }
+                    else {
+                        msg_text.innerText = "授权路径不存在！"
+                    }
+                });
+            }
+            else if (query.auth_code != null) {
+                msg_text.innerText = "校验中……"
+                let temp_id = window.localStorage.getItem('open_auth_id');
+                if (temp_id != null) {
+                    app.callFunction({
+                        name: 'authUpdateOne',
+                        data: {
+                            code: query.auth_code,
+                            id: temp_id
+                        }
+                    }).then(res => {
+                        console.log(res);
+                        if (res.result!= null) {
+                            window.localStorage.removeItem('open_auth_id');
+                            console.log(res.result);
+                            msg_text.innerText = "校验成功！";
+                        }
+                        else {
+                            msg_text.innerText = "校验失败，请刷新此页面重试！"
+                        }
+                    });
+                }
+                else {
+                    msg_text.innerText = "路径已经刷新，请联系平台！"
+                }
+            }
+        });
+
+        function getQueryString() {
+            var qs = location.search.substr(1),
+                args = {},
+                items = qs.length ? qs.split("&") : [],
+                item = null,
+                len = items.length;
+            for (var i = 0; i < len; i++) {
+                item = items[i].split("=");
+                var name = decodeURIComponent(item[0]),
+                    value = decodeURIComponent(item[1]);
+                if (name) {
+                    args[name] = value;
+                }
+            }
+            return args;
+        }
+    </script>
+</body>
+
+</html>
